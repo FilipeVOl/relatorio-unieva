@@ -99,8 +99,8 @@ const Table: React.FC<TableProps> = ({
       }
       i++;
     }
-
-    return filteredData;
+ 
+    return filteredData
   };
 
   return (
