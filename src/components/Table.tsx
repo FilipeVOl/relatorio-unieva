@@ -1,107 +1,158 @@
-import React, { useEffect, useState } from "react";
-import Usuarios, { StateType } from "../services/Usuarios";
+import React, { useEffect, useState, useContext } from "react";
+import { useUsuarios } from "../context/UsuariosContext";
+import { StateType } from '../services/Usuarios';
 
-type DataKey = "aluno" | "curso";
+type DataKey = "aluno" | "curso" | "usuario";
 
-interface OptionValues {
-  name: string;
-  discipline: string;
-}
+type OptionValues = {
+  name: "dontcontainname" | "containname" | "equaltoname" | "startswithname" | "endswithname";
+  discipline: "dontcontaindisc" | "containdisc" | "equaltodisc" | "startswithdisc" | "endswithdisc";
+  user: "dontcontainuser" | "containuser" | "equaltouser" | "startswithuser" | "endswithuser";
+};
+
 interface TableProps {
   filteredName?: string;
   filteredDiscipline?: string;
+  filteredUsers?: string;
   optionValues: OptionValues;
   tableRef: React.RefObject<HTMLTableElement>;
 }
 
+export const getFilteredData = (data: any, filteredName: string, filteredDiscipline: string | number, optionValues: OptionValues, filteredUsers: string | number) => {
+  let filteredData = data.data;
+  const filters = [
+    { key: "aluno" as DataKey, 
+      value: filteredName, 
+      option: optionValues.name },
+    {
+      key: "curso" as DataKey,
+      value: filteredDiscipline,
+      option: optionValues.discipline,
+    },
+    {
+      key: "usuario" as DataKey,
+      value: filteredUsers,
+      option: optionValues.user,
+    },
+  ];
+
+
+  let i = 0;
+  while (i < filters.length) {
+    const { key, value, option } = filters[i];
+
+    if (value) {
+      switch (option) {
+        case "dontcontainname":
+        case "dontcontaindisc":
+        case "dontcontainuser":
+          filteredData = filteredData.filter(
+            (aluno: StateType['data'][number]) => typeof value === 'string' && !(aluno[key] as string).toLowerCase().includes(value.toLowerCase())
+          );
+          break;
+        case "containname":
+        case "containdisc":
+        case "containuser":
+          filteredData = filteredData.filter((aluno: StateType['data'][number]) =>
+            typeof value === 'string' && (aluno[key] as string).toLowerCase().includes(value.toLowerCase())
+          );
+          break;
+        case "equaltoname":
+        case "equaltodisc":
+        case "equaltouser":
+          filteredData = filteredData.filter(
+            (aluno: StateType['data'][number]) => typeof value === 'string' && (aluno[key] as string).toLowerCase() === value.toLowerCase()
+          );
+          break;
+        case "startswithname":
+        case "startswithdisc":
+        case "startswithuser":
+          filteredData = filteredData.filter((aluno: StateType['data'][number]) =>
+            typeof value === 'string' && (aluno[key] as string).toLowerCase().startsWith(value.toLowerCase())
+          );
+          break;
+        case "endswithname":
+        case "endswithdisc":
+        case "endswithuser":
+          filteredData = filteredData.filter((aluno: StateType['data'][number]) =>
+            typeof value === 'string' && (aluno[key] as string).toLowerCase().endsWith(value.toLowerCase())
+          );
+          break;
+      }
+    }
+    i++;
+  }
+
+  filteredData = filteredData.filter(
+    (value: any, index: number, self: any) =>
+      index === self.findIndex((aluno: any) => aluno.aluno_id === value.aluno_id)
+  );
+
+  let expandedData: any[] = [];
+  filteredData.forEach((aluno: any) => {
+    const disciplinas = data.data.filter((d: any) => d.aluno_id === aluno.aluno_id);
+    disciplinas.forEach((disciplina: any, index: number) => {
+      expandedData.push({ ...aluno, curso: disciplina.curso, unique_id: `${aluno.aluno_id}-${index}` });
+    });
+  });
+
+  if (filteredDiscipline && optionValues.discipline !== "dontcontaindisc") {
+    expandedData = expandedData.filter(aluno => 
+      typeof filteredDiscipline === 'string' && aluno.curso.toLowerCase().includes(filteredDiscipline.toLowerCase())
+    );
+  } else if (filteredDiscipline && optionValues.discipline === "dontcontaindisc") {
+    expandedData = expandedData.filter(aluno => 
+      typeof filteredDiscipline === 'string' && !aluno.curso.toLowerCase().includes(filteredDiscipline.toLowerCase())
+    );
+  }
+
+  return expandedData;
+};
+
 const Table: React.FC<TableProps> = ({
   filteredName = "",
   filteredDiscipline = "",
+  filteredUsers = "",
   optionValues,
   tableRef,
 }) => {
-
-  const initialState: StateType = {
-    page: 0,
-    size: 0,
-    total_records: 0,
-    total_pages: 0,
-    data: []
-  };
-
-  const [data, setData] = useState<StateType>(initialState);
+  const { data, setData, totalPages, setTotalPages } = useUsuarios();
   const [page, setPage] = useState(1);
-  const [totalItems, setTotalItems] = useState<number>(0);
   const [pageGroup, setPageGroup] = useState(0); // New state for page group
-  const itemsPerPage = 5;
-  const totalPages = Math.ceil(totalItems / itemsPerPage);
+  const itemsPerPage = 15;
 
   const handlePageChange = (pageNumber: number) => {
     setPage(pageNumber);
     setPageGroup(Math.floor((pageNumber - 1) / 5)); // Update pageGroup based on the selected page
-    Usuarios(setData, setTotalItems, pageNumber); // Fetch data for the selected page
+  };
+
+  const getPaginatedData = () => {
+    const filteredData = getFilteredData(data, filteredName, filteredDiscipline, optionValues, filteredUsers);
+    const startIndex = (page - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return filteredData.slice(startIndex, endIndex);
+  };
+
+  const hasNextGroupData = () => {
+    const filteredData = getFilteredData(data, filteredName, filteredDiscipline, optionValues, filteredUsers);
+    const startIndex = (pageGroup + 1) * 5 * itemsPerPage;
+    return startIndex < filteredData.length;
   };
 
   useEffect(() => {
-    Usuarios(setData, setTotalItems, page); // Fetch data for the initial page
-    console.log(totalItems);
-  }, [page]);
-
-  const getFilteredData = () => {
-    let filteredData = data.data;
-    const filters = [
-      { key: "aluno" as DataKey, 
-        value: filteredName, 
-        option: optionValues.name },
-      {
-        key: "curso" as DataKey,
-        value: filteredDiscipline,
-        option: optionValues.discipline,
-      },
-    ];
-
-    let i = 0;
-    while (i < filters.length) {
-      const { key, value, option } = filters[i];
-      if (value) {
-        switch (option) {
-          case "dontcontainname":
-          case "dontcontaindisc":
-            filteredData = filteredData.filter(
-              (aluno) => !aluno[key].toLowerCase().includes(value.toLowerCase())
-            );
-            break;
-          case "containname":
-          case "containdisc":
-            filteredData = filteredData.filter((aluno) =>
-              aluno[key].toLowerCase().includes(value.toLowerCase())
-            );
-            break;
-          case "equaltoname":
-          case "equaltodisc":
-            filteredData = filteredData.filter(
-              (aluno) => aluno[key].toLowerCase() === value.toLowerCase()
-            );
-            break;
-          case "startswithname":
-          case "startswithdisc":
-            filteredData = filteredData.filter((aluno) =>
-              aluno[key].toLowerCase().startsWith(value.toLowerCase())
-            );
-            break;
-          case "endswithname":
-          case "endswithdisc":
-            filteredData = filteredData.filter((aluno) =>
-              aluno[key].toLowerCase().endsWith(value.toLowerCase())
-            );
-            break;
-        }
-      }
-      i++;
+    const cachedData = localStorage.getItem('usuarios');
+    if (cachedData) {
+      const data = JSON.parse(cachedData);
+      setData(data);
+      setTotalPages(Math.ceil(getFilteredData(data, filteredName, filteredDiscipline, optionValues, filteredUsers).length / itemsPerPage));
     }
- 
-    return filteredData
-  };
+  }, [setData, setTotalPages, filteredName, filteredDiscipline, optionValues]);
+
+  useEffect(() => {
+    setPage(1);
+    setPageGroup(0);
+  }, [filteredName, filteredDiscipline, optionValues]);
+
 
   return (
     <div className="overflow-auto xl:min-h-[40%] w-full bg-[#D9D9D9] text-white font-bold rounded-lg">
@@ -121,18 +172,18 @@ const Table: React.FC<TableProps> = ({
               </tr>
             </thead>
             <tbody>
-              {getFilteredData().map((aluno) => (
+              {getPaginatedData().map((aluno) => (
                 <tr
-                  key={aluno.aluno_id}
+                  key={aluno.unique_id}
                   className="odd:bg-white even:bg-gray-200 text-black items-center text-center break-words"
                 >
-                  <td className="w-10">{aluno.aluno_id}</td>
-                  <td className="w-32">{aluno.usuario}</td>
-                  <td className="w-64">{aluno.aluno}</td>
-                  <td className="w-96">{aluno.curso}</td>
-                  <td className="w-20">{aluno.primeira_etapa}</td>
-                  <td className="w-20">{aluno.segunda_etapa}</td>
-                  <td className="w-20">{aluno.prova_presencial}</td>
+                  <td className="">{aluno.aluno_id}</td>
+                  <td className="">{aluno.usuario}</td>
+                  <td className="">{aluno.aluno}</td>
+                  <td className="">{aluno.curso}</td>
+                  <td className="">{aluno.primeira_etapa}</td>
+                  <td className="">{aluno.segunda_etapa}</td>
+                  <td className="">{aluno.prova_presencial}</td>
                 </tr>
               ))}
             </tbody>
@@ -149,7 +200,7 @@ const Table: React.FC<TableProps> = ({
                 </button>
               );
             })}
-            {totalPages > (pageGroup + 1) * 5 && (
+            {totalPages > (pageGroup + 1) * 5 && hasNextGroupData() && (
               <button onClick={() => handlePageChange((pageGroup + 1) * 5 + 1)}>Next</button>
             )}
           </div>

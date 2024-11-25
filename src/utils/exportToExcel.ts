@@ -1,9 +1,8 @@
-
 import * as XLSX from "xlsx";
 
-export const exportToExcel = (tableRef: React.RefObject<HTMLTableElement>) => {
-  if (tableRef.current) {
-    const wb = XLSX.utils.table_to_book(tableRef.current);
-    XLSX.writeFile(wb, "table_data.xlsx");
-  }
+export const exportToExcel = (data: any[], fileName: string = "table_data.xlsx") => {
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
+  XLSX.writeFile(wb, fileName);
 };
